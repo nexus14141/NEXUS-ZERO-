@@ -38,3 +38,16 @@ export const updateTask = (uid, id, patch) =>
 
 export const deleteTask = (uid, id) =>
   run(supabase.from("tasks").delete().eq("id", id).eq("user_id", uid));
+
+/* ---------- Memories ---------- */
+export const listMemories = (uid) =>
+  run(supabase.from("memories").select("*").eq("user_id", uid).order("created_at", { ascending: false }));
+
+export const createMemory = (uid, { content, category, pinned }) =>
+  run(supabase.from("memories").insert({ user_id: uid, content, category: category || null, pinned: !!pinned }).select().single());
+
+export const updateMemory = (uid, id, patch) =>
+  run(supabase.from("memories").update(patch).eq("id", id).eq("user_id", uid).select().single());
+
+export const deleteMemory = (uid, id) =>
+  run(supabase.from("memories").delete().eq("id", id).eq("user_id", uid));

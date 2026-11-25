@@ -2,6 +2,7 @@ import { configError, supabase, register, login, logout, getSession } from "./au
 import { $, toast, showError } from "./ui.js";
 import { tasksScreen } from "./tasks.js";
 import { projectsScreen } from "./projects.js";
+import { memoryScreen } from "./memory.js";
 
 const state = { user: null };
 
@@ -28,14 +29,6 @@ const link = (id, text) => `
     ${chevron}
   </a>`;
 
-const soon = (title, text, stage) => `
-  <h1>${title}</h1>
-  <section class="glass card empty">
-    <div class="orb"></div>
-    <h2>Arrives in Stage ${stage}</h2>
-    <p class="muted">${text}</p>
-  </section>`;
-
 const views = {
   home: () => `
     <h1>${greeting()}</h1>
@@ -50,19 +43,18 @@ const views = {
       ${link("projects", "Group your work into projects")}
       ${link("memory", "Keep what matters")}
     </section>`,
-  memory: () => soon("Memory", "Save notes the AI can remember.", 3),
   settings: () => `
     <h1>Settings</h1>
     <section class="glass rows">
       <div class="row"><span class="grow">Account</span><span class="val" id="s-email"></span></div>
       <div class="row"><span class="grow">Connection</span><span class="val ok">Connected</span></div>
-      <div class="row"><span class="grow">Version</span><span class="val">Stage 2</span></div>
+      <div class="row"><span class="grow">Version</span><span class="val">Stage 3</span></div>
     </section>
     <button class="btn secondary wide" id="logout-btn">Sign out</button>`,
 };
 
 // Screens that load their own data and render themselves.
-const screens = { tasks: tasksScreen, projects: projectsScreen };
+const screens = { tasks: tasksScreen, projects: projectsScreen, memory: memoryScreen };
 
 const mounts = {
   home() {

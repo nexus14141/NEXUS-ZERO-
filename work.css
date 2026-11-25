@@ -46,3 +46,17 @@ dialog#sheet[open] { animation: rise .22s ease-out; }
 .sheet-body h2 { margin-bottom: 4px; }
 @keyframes rise { from { transform: translateY(40px); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { dialog#sheet[open] { animation: none; } }
+
+/* Memory */
+.search { margin-bottom: 16px; -webkit-appearance: none; appearance: none; }
+.row.memory { align-items: flex-start; }
+.mem-text {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4;
+  overflow: hidden; white-space: pre-wrap; word-break: break-word;
+}
+.row.memory .sub { margin-top: 6px; }
+.tag { margin-right: 8px; padding: 2px 8px; border-radius: 999px; background: var(--glass-2); color: var(--accent); font-size: 12px; font-weight: 600; }
+.pin { display: grid; place-items: center; flex: none; width: 44px; height: 44px; margin: -10px -10px -10px 0; padding: 0; background: none; border: 0; color: var(--muted); cursor: pointer; }
+.pin svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.pin[aria-pressed="true"] { color: var(--accent); }
+.pin[aria-pressed="true"] svg { fill: currentColor; }
