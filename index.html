@@ -1,1 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#07080c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>NEXUS ZERO</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%2307080c'/%3E%3Cpath d='M9 23V9l14 14V9' fill='none' stroke='%23a9bcff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="error-panel" role="alert" hidden></div>
 
+  <section id="auth-view" class="auth" hidden>
+    <div class="auth-card glass">
+      <div class="mark big">N</div>
+      <h1>Think beyond limits.</h1>
+      <p class="muted">Sign in or create an account to enter your workspace.</p>
+      <form id="auth-form">
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" required>
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password" minlength="6" placeholder="At least 6 characters" required>
+        <div class="stack">
+          <button type="submit" class="btn primary">Sign in</button>
+          <button type="button" id="signup-btn" class="btn secondary">Create account</button>
+        </div>
+      </form>
+      <p id="auth-message" class="message" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <div id="app-view" hidden>
+    <header class="topbar">
+      <div class="brand"><span class="mark">N</span><span>NEXUS <b>ZERO</b></span></div>
+      <span class="pill" id="net"><i></i><span>Online</span></span>
+    </header>
+    <main id="view" tabindex="-1"></main>
+    <nav class="tabbar" id="tabbar" aria-label="Main"></nav>
+  </div>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    // Classic script: still reports errors if the module files fail to load.
+    function nxError(msg) {
+      var p = document.getElementById("error-panel");
+      p.textContent = "Error: " + msg + " (tap to dismiss)";
+      p.hidden = false;
+    }
+    window.nxError = nxError;
+    document.getElementById("error-panel").onclick = function () { this.hidden = true; };
+    window.addEventListener("error", function (e) {
+      nxError(e.message || "Failed to load " + (e.target && (e.target.src || e.target.href)));
+    }, true);
+    window.addEventListener("unhandledrejection", function (e) {
+      nxError((e.reason && e.reason.message) || String(e.reason));
+    });
+  </script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
