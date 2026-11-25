@@ -1,5 +1,7 @@
 import { configError, supabase, register, login, logout, getSession } from "./auth.js";
 import { $, toast, showError } from "./ui.js";
+import { tasksScreen } from "./tasks.js";
+import { projectsScreen } from "./projects.js";
 
 const state = { user: null };
 
@@ -48,18 +50,19 @@ const views = {
       ${link("projects", "Group your work into projects")}
       ${link("memory", "Keep what matters")}
     </section>`,
-  tasks: () => soon("Tasks", "Create, edit and complete tasks.", 2),
-  projects: () => soon("Projects", "Organise tasks into projects.", 2),
   memory: () => soon("Memory", "Save notes the AI can remember.", 3),
   settings: () => `
     <h1>Settings</h1>
     <section class="glass rows">
       <div class="row"><span class="grow">Account</span><span class="val" id="s-email"></span></div>
       <div class="row"><span class="grow">Connection</span><span class="val ok">Connected</span></div>
-      <div class="row"><span class="grow">Version</span><span class="val">Stage 1</span></div>
+      <div class="row"><span class="grow">Version</span><span class="val">Stage 2</span></div>
     </section>
     <button class="btn secondary wide" id="logout-btn">Sign out</button>`,
 };
+
+// Screens that load their own data and render themselves.
+const screens = { tasks: tasksScreen, projects: projectsScreen };
 
 const mounts = {
   home() {
@@ -86,8 +89,14 @@ function renderTabs() {
 function route() {
   if (!state.user) return;
   const tab = TABS.find((t) => t.id === location.hash.slice(1)) ?? TABS[0];
-  $("#view").innerHTML = views[tab.id]();
-  mounts[tab.id]?.();
+  if (screens[tab.id]) {
+    const root = document.createElement("div");
+    $("#view").replaceChildren(root);
+    screens[tab.id](root, state.user).catch(showError);
+  } else {
+    $("#view").innerHTML = views[tab.id]();
+    mounts[tab.id]?.();
+  }
   document.querySelectorAll(".tab").forEach((a) => {
     const on = a.dataset.id === tab.id;
     a.classList.toggle("on", on);
