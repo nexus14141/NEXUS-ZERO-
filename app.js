@@ -3,6 +3,7 @@ import { $, toast, showError } from "./ui.js";
 import { tasksScreen } from "./tasks.js";
 import { projectsScreen } from "./projects.js";
 import { memoryScreen } from "./memory.js";
+import { chatScreen, askAI } from "./chat.js";
 
 const state = { user: null };
 
@@ -14,7 +15,10 @@ const TABS = [
   { id: "memory", label: "Memory", icon: '<path d="M12 3a6 6 0 0 0-4 10.5V17h8v-3.5A6 6 0 0 0 12 3z"/><path d="M9.5 21h5"/>' },
   { id: "settings", label: "Settings", icon: '<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>' },
 ];
-const icon = (id) => TABS.find((t) => t.id === id).icon;
+// Chat is reached from Home, so it is a route but not a tab.
+const CHAT = { id: "chat", label: "Chat", icon: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>' };
+const ROUTES = [...TABS, CHAT];
+const icon = (id) => ROUTES.find((t) => t.id === id).icon;
 const chevron = '<svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>';
 
 function greeting() {
@@ -25,7 +29,7 @@ function greeting() {
 const link = (id, text) => `
   <a class="row" href="#${id}">
     <svg class="ico" viewBox="0 0 24 24">${icon(id)}</svg>
-    <div class="grow"><h3>${TABS.find((t) => t.id === id).label}</h3><span class="muted small">${text}</span></div>
+    <div class="grow"><h3>${ROUTES.find((t) => t.id === id).label}</h3><span class="muted small">${text}</span></div>
     ${chevron}
   </a>`;
 
@@ -36,9 +40,9 @@ const views = {
       <h2>What do you want to work on?</h2>
       <textarea id="command" placeholder="Describe a task, idea or project..."></textarea>
       <button class="btn primary wide" id="command-btn">Send</button>
-      <p class="muted small" style="margin:12px 0 0">The AI core connects in Stage 4.</p>
     </section>
     <section class="glass rows">
+      ${link("chat", "Your conversations with the AI")}
       ${link("tasks", "Plan and finish your work")}
       ${link("projects", "Group your work into projects")}
       ${link("memory", "Keep what matters")}
@@ -48,19 +52,20 @@ const views = {
     <section class="glass rows">
       <div class="row"><span class="grow">Account</span><span class="val" id="s-email"></span></div>
       <div class="row"><span class="grow">Connection</span><span class="val ok">Connected</span></div>
-      <div class="row"><span class="grow">Version</span><span class="val">Stage 3</span></div>
+      <div class="row"><span class="grow">Version</span><span class="val">Stage 4</span></div>
     </section>
     <button class="btn secondary wide" id="logout-btn">Sign out</button>`,
 };
 
 // Screens that load their own data and render themselves.
-const screens = { tasks: tasksScreen, projects: projectsScreen, memory: memoryScreen };
+const screens = { tasks: tasksScreen, projects: projectsScreen, memory: memoryScreen, chat: chatScreen };
 
 const mounts = {
   home() {
     $("#command-btn").addEventListener("click", () => {
       const text = $("#command").value.trim();
-      toast(text ? "The AI core isn't connected yet." : "Type a task first.", text ? "info" : "error");
+      if (text) askAI(text);
+      else toast("Type a task first.", "error");
     });
   },
   settings() {
@@ -80,7 +85,7 @@ function renderTabs() {
 
 function route() {
   if (!state.user) return;
-  const tab = TABS.find((t) => t.id === location.hash.slice(1)) ?? TABS[0];
+  const tab = ROUTES.find((t) => t.id === location.hash.slice(1)) ?? TABS[0];
   if (screens[tab.id]) {
     const root = document.createElement("div");
     $("#view").replaceChildren(root);
@@ -90,7 +95,7 @@ function route() {
     mounts[tab.id]?.();
   }
   document.querySelectorAll(".tab").forEach((a) => {
-    const on = a.dataset.id === tab.id;
+    const on = a.dataset.id === (tab.id === "chat" ? "home" : tab.id);
     a.classList.toggle("on", on);
     on ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current");
   });

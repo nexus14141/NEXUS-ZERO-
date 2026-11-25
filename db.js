@@ -51,3 +51,26 @@ export const updateMemory = (uid, id, patch) =>
 
 export const deleteMemory = (uid, id) =>
   run(supabase.from("memories").delete().eq("id", id).eq("user_id", uid));
+
+/* ---------- Conversations and messages ---------- */
+export const listConversations = (uid) =>
+  run(supabase.from("conversations").select("id, title, updated_at").eq("user_id", uid).order("updated_at", { ascending: false }).limit(50));
+
+export const listMessages = (uid, conversationId) =>
+  run(supabase.from("messages").select("*").eq("user_id", uid).eq("conversation_id", conversationId).order("created_at", { ascending: true }));
+
+export async function deleteConversation(uid, id) {
+  await run(supabase.from("messages").delete().eq("conversation_id", id).eq("user_id", uid));
+  await run(supabase.from("conversations").delete().eq("id", id).eq("user_id", uid));
+}
+
+// Sends a message to the Edge Function. It creates the conversation on the first message.
+export async function sendMessage(conversationId, message) {
+  const { data, error } = await supabase.functions.invoke("nexus-chat", { body: { conversation_id: conversationId, message } });
+  if (error) {
+    let text = "The AI core couldn't answer. Try again.";
+    try { text = (await error.context.json()).error || text; } catch { /* keep the default */ }
+    throw new Error(text);
+  }
+  return data; // { conversation_id, reply }
+}
