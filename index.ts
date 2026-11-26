@@ -18,6 +18,27 @@ const CORS = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
+// Tools the AI may PROPOSE. Nothing is created until the user taps Add in the app.
+const TOOLS = [
+  { type: "function", function: { name: "create_task", description: "Propose a task for the user's to-do list. Use only when the user clearly asks to add, plan or be reminded of something actionable.",
+    parameters: { type: "object", properties: { title: { type: "string" }, notes: { type: "string" }, project: { type: "string", description: "Exact name of one of the user's projects, if it clearly fits" } }, required: ["title"] } } },
+  { type: "function", function: { name: "save_memory", description: "Propose saving a lasting fact or preference about the user. Use only when the user asks you to remember something.",
+    parameters: { type: "object", properties: { content: { type: "string" }, category: { type: "string" } }, required: ["content"] } } },
+];
+const clip = (v: unknown, n: number) => String(v ?? "").trim().slice(0, n);
+
+// Validates and trims the AI's tool calls before they reach the app.
+function toActions(calls: Record<number, { name: string; args: string }>) {
+  const out: Record<string, string>[] = [];
+  for (const c of Object.values(calls)) {
+    let a: any;
+    try { a = JSON.parse(c.args || "{}"); } catch { continue; }
+    if (c.name === "create_task" && clip(a.title, 120)) out.push({ type: "task", title: clip(a.title, 120), notes: clip(a.notes, 1000), project: clip(a.project, 120) });
+    if (c.name === "save_memory" && clip(a.content, 1000)) out.push({ type: "memory", content: clip(a.content, 1000), category: clip(a.category, 40) });
+  }
+  return out.slice(0, 5);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "Method not allowed." }, 405);
@@ -65,6 +86,13 @@ Deno.serve(async (req) => {
     let system = "You are NEXUS ZERO, a calm, capable personal AI assistant. Be concise and clear. Use plain text and short paragraphs; avoid markdown tables and heavy formatting.";
     if (memories?.length) system += "\n\nThings the user has asked you to remember:\n" + memories.map((m) => `- ${String(m.content).slice(0, 500)}`).join("\n");
 
+    // 4b. Let the AI propose tasks and memories (streaming requests only) and know the user's projects.
+    if (body.stream === true) {
+      const { data: projects } = await db.from("projects").select("name").eq("user_id", user.id).neq("status", "completed").limit(30);
+      if (projects?.length) system += "\n\nThe user's active projects: " + projects.map((p) => String(p.name).slice(0, 80)).join("; ") + ".";
+      system += "\n\nWhen the user asks you to add a task or to remember something, call the matching tool and also reply in one short sentence. The user confirms before anything is saved, so never say it is already saved.";
+    }
+
     // 5. Build the OpenRouter request (the key stays on the server).
     const payload = { model: MODEL, max_tokens: 1200, messages: [{ role: "system", content: system }, ...history, { role: "user", content: message }] };
     const streaming = body.stream === true;
@@ -98,7 +126,7 @@ Deno.serve(async (req) => {
         method: "POST",
         signal: ctrl.signal,
         headers: { Authorization: `Bearer ${aiKey}`, "Content-Type": "application/json", "HTTP-Referer": SITE, "X-Title": "NEXUS ZERO" },
-        body: JSON.stringify(streaming ? { ...payload, stream: true } : payload),
+        body: JSON.stringify(streaming ? { ...payload, stream: true, tools: TOOLS } : payload),
       });
     } catch (e) {
       clearTimeout(timer);
@@ -120,6 +148,7 @@ Deno.serve(async (req) => {
           const send = (o: unknown) => c.enqueue(enc.encode(`data: ${JSON.stringify(o)}\n\n`));
           let reply = "";
           let buf = "";
+          const calls: Record<number, { name: string; args: string }> = {};
           try {
             const reader = ai.body!.getReader();
             for (;;) {
@@ -131,13 +160,24 @@ Deno.serve(async (req) => {
                 const line = buf.slice(0, nl).trim();
                 buf = buf.slice(nl + 1);
                 if (!line.startsWith("data:") || line.endsWith("[DONE]")) continue;
-                let delta = "";
-                try { delta = JSON.parse(line.slice(5))?.choices?.[0]?.delta?.content ?? ""; } catch { /* partial line */ }
-                if (delta) { reply += delta; send({ delta }); }
+                let chunk: any = null;
+                try { chunk = JSON.parse(line.slice(5)); } catch { /* partial line */ }
+                const d = chunk?.choices?.[0]?.delta;
+                if (d?.content) { reply += d.content; send({ delta: d.content }); }
+                for (const t of d?.tool_calls ?? []) {
+                  const k = t.index ?? 0;
+                  calls[k] ??= { name: "", args: "" };
+                  if (t.function?.name) calls[k].name = t.function.name;
+                  if (t.function?.arguments) calls[k].args += t.function.arguments;
+                }
               }
             }
+            const actions = toActions(calls);
+            if (!reply.trim() && actions.length) { reply = "Here's what I'd add. Tap to confirm."; send({ delta: reply }); }
             if (!reply.trim()) throw new Error("empty");
-            send({ done: true, conversation_id: await saveExchange(reply.trim()) });
+            const id = await saveExchange(reply.trim());
+            if (actions.length) send({ actions });
+            send({ done: true, conversation_id: id });
           } catch (e) {
             console.error("Stream failed:", (e as Error).message);
             try { send({ error: failure(e as Error) }); } catch { /* the app disconnected */ }
