@@ -1,5 +1,5 @@
-import { listConversations, listMessages, deleteConversation, sendMessage } from "./db.js";
-import { esc, toast, openSheet, closeSheet, armDelete } from "./ui.js";
+import { listConversations, listMessages, deleteConversation, sendMessage, createMemory, createTask } from "./db.js";
+import { esc, formatText, toast, openSheet, closeSheet, armDelete } from "./ui.js";
 
 const ARROW = '<svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
 const shortDate = (iso) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -35,9 +35,11 @@ export async function chatScreen(root, user) {
   const form = root.querySelector("[data-form]");
   const input = form.elements.text;
 
-  const bubble = (m) => `
-    <div class="msg ${m.role}${m.failed ? " failed" : ""}">
-      <div class="bubble">${esc(m.content)}</div>
+  const actBtn = (m, kind, label) => `<button class="act" data-act="${kind}"${m.saved?.[kind] ? " disabled" : ""}>${m.saved?.[kind] ? "Saved" : label}</button>`;
+  const bubble = (m, i) => `
+    <div class="msg ${m.role}${m.failed ? " failed" : ""}" data-i="${i}">
+      <div class="bubble">${m.role === "assistant" ? formatText(m.content) : esc(m.content)}</div>
+      ${m.role === "assistant" ? `<div class="acts">${actBtn(m, "memory", "Save to memory")}${actBtn(m, "task", "Make task")}</div>` : ""}
       ${m.failed ? `<button class="retry" data-retry>${esc(m.error)} Tap to retry</button>` : ""}
     </div>`;
 
@@ -71,6 +73,24 @@ export async function chatScreen(root, user) {
     }
     sending = false;
     renderThread();
+  }
+
+  // Turns an AI reply into a memory or a task.
+  async function saveFromReply(btn, m) {
+    btn.disabled = true;
+    try {
+      if (btn.dataset.act === "memory") await createMemory(user.id, { content: m.content.slice(0, 2000), category: "From chat" });
+      else {
+        const first = m.content.split("\n").find((l) => l.trim()) ?? "";
+        await createTask(user.id, { title: first.replace(/[*#`]/g, "").trim().slice(0, 120) || "Task from chat", description: m.content.slice(0, 4000) });
+      }
+      m.saved = { ...m.saved, [btn.dataset.act]: true };
+      btn.textContent = "Saved";
+      toast(btn.dataset.act === "memory" ? "Saved to memory" : "Task added");
+    } catch (err) {
+      btn.disabled = false;
+      toast(err.message, "error");
+    }
   }
 
   async function openConversation(id) {
@@ -116,6 +136,8 @@ export async function chatScreen(root, user) {
   root.addEventListener("click", (e) => {
     if (e.target.closest("[data-history]")) return showHistory();
     if (e.target.closest("[data-new]")) { activeId = null; messages = []; return renderThread(); }
+    const act = e.target.closest("[data-act]");
+    if (act) return saveFromReply(act, messages[act.closest("[data-i]").dataset.i]);
     if (e.target.closest("[data-retry]")) return send(null, messages.find((m) => m.failed));
   });
 

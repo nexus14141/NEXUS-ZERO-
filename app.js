@@ -1,9 +1,10 @@
-import { configError, supabase, register, login, logout, getSession } from "./auth.js";
+import { configError, supabase, register, login, resetPassword, getSession } from "./auth.js";
 import { $, toast, showError } from "./ui.js";
 import { tasksScreen } from "./tasks.js";
 import { projectsScreen } from "./projects.js";
 import { memoryScreen } from "./memory.js";
 import { chatScreen, askAI } from "./chat.js";
+import { settingsScreen, changePassword } from "./settings.js";
 
 const state = { user: null };
 
@@ -47,18 +48,10 @@ const views = {
       ${link("projects", "Group your work into projects")}
       ${link("memory", "Keep what matters")}
     </section>`,
-  settings: () => `
-    <h1>Settings</h1>
-    <section class="glass rows">
-      <div class="row"><span class="grow">Account</span><span class="val" id="s-email"></span></div>
-      <div class="row"><span class="grow">Connection</span><span class="val ok">Connected</span></div>
-      <div class="row"><span class="grow">Version</span><span class="val">Stage 4</span></div>
-    </section>
-    <button class="btn secondary wide" id="logout-btn">Sign out</button>`,
 };
 
 // Screens that load their own data and render themselves.
-const screens = { tasks: tasksScreen, projects: projectsScreen, memory: memoryScreen, chat: chatScreen };
+const screens = { tasks: tasksScreen, projects: projectsScreen, memory: memoryScreen, chat: chatScreen, settings: settingsScreen };
 
 const mounts = {
   home() {
@@ -66,13 +59,6 @@ const mounts = {
       const text = $("#command").value.trim();
       if (text) askAI(text);
       else toast("Type a task first.", "error");
-    });
-  },
-  settings() {
-    $("#s-email").textContent = state.user?.email ?? "";
-    $("#logout-btn").addEventListener("click", async () => {
-      const { error } = await logout();
-      if (error) toast(error.message, "error");
     });
   },
 };
@@ -130,6 +116,21 @@ async function submitAuth(kind) {
   }
 }
 
+async function forgotPassword() {
+  const email = $("#email").value.trim();
+  if (!email) return authMsg("Enter your email above first.", true);
+  setBusy(true);
+  try {
+    const { error } = await resetPassword(email);
+    if (error) authMsg(error.message, true);
+    else authMsg("If that email has an account, a reset link is on its way.");
+  } catch (err) {
+    authMsg(err.message || "Something went wrong. Try again.", true);
+  } finally {
+    setBusy(false);
+  }
+}
+
 function setSession(session) {
   const previous = state.user?.id;
   state.user = session?.user ?? null;
@@ -158,6 +159,7 @@ async function init() {
 
   $("#auth-form").addEventListener("submit", (e) => { e.preventDefault(); submitAuth("login"); });
   $("#signup-btn").addEventListener("click", () => submitAuth("signup"));
+  $("#forgot-btn").addEventListener("click", forgotPassword);
 
   if (configError) {
     $("#auth-view").hidden = false;
@@ -165,10 +167,14 @@ async function init() {
     return authMsg(configError, true);
   }
 
-  supabase.auth.onAuthStateChange((_event, session) => setSession(session));
+  supabase.auth.onAuthStateChange((event, session) => {
+    setSession(session);
+    if (event === "PASSWORD_RECOVERY") changePassword(); // arrived from a reset email
+  });
   const { data, error } = await getSession();
   if (error) authMsg(error.message, true);
   setSession(data?.session ?? null);
 }
 
 init().catch(showError);
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});

@@ -84,3 +84,16 @@ dialog#sheet[open] { animation: rise .22s ease-out; }
 .send:disabled { opacity: .4; }
 .send svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 @media (prefers-reduced-motion: reduce) { .typing i { animation: none; opacity: .6; } }
+
+/* Stage 5: formatted replies, reply actions, forgot-password link */
+.linkbtn { min-height: 44px; background: none; border: 0; color: var(--muted); font: inherit; font-size: 15px; cursor: pointer; }
+.msg.assistant .bubble { white-space: normal; }
+.bubble p, .bubble ul, .bubble pre { margin: 0 0 .65em; }
+.bubble > :last-child { margin-bottom: 0; }
+.bubble ul { padding-left: 1.2em; }
+.bubble code { padding: 1px 6px; border-radius: 6px; background: rgba(0, 0, 0, .35); font: 13.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.bubble pre { padding: 12px 14px; overflow-x: auto; border-radius: 12px; background: rgba(0, 0, 0, .4); }
+.bubble pre code { padding: 0; background: none; white-space: pre; }
+.acts { display: flex; gap: 6px; margin-top: 4px; }
+.act { padding: 8px 10px; background: none; border: 0; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
+.act:disabled { color: var(--ok); cursor: default; }

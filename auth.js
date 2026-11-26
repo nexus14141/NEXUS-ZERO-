@@ -26,3 +26,5 @@ export const register = (email, password) =>
 export const login = (email, password) => supabase.auth.signInWithPassword({ email, password });
 export const logout = () => supabase.auth.signOut();
 export const getSession = () => supabase.auth.getSession();
+export const resetPassword = (email) => supabase.auth.resetPasswordForEmail(email, { redirectTo: SITE_URL });
+export const updatePassword = (password) => supabase.auth.updateUser({ password });

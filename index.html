@@ -2,8 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="theme-color" content="#07080c">
+  <meta name="apple-mobile-web-app-title" content="NEXUS ZERO">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -27,6 +30,7 @@
         <div class="stack">
           <button type="submit" class="btn primary">Sign in</button>
           <button type="button" id="signup-btn" class="btn secondary">Create account</button>
+          <button type="button" id="forgot-btn" class="linkbtn">Forgot password?</button>
         </div>
       </form>
       <p id="auth-message" class="message" aria-live="polite"></p>

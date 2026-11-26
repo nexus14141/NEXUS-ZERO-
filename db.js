@@ -74,3 +74,12 @@ export async function sendMessage(conversationId, message) {
   }
   return data; // { conversation_id, reply }
 }
+
+/* ---------- Export ---------- */
+export async function exportAll(uid) {
+  const all = (table) => run(supabase.from(table).select("*").eq("user_id", uid));
+  const [projects, tasks, memories, conversations, messages] = await Promise.all(
+    ["projects", "tasks", "memories", "conversations", "messages"].map(all)
+  );
+  return { projects, tasks, memories, conversations, messages };
+}
