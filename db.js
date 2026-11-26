@@ -5,7 +5,7 @@ export const PROJECT_STATUSES = ["active", "paused", "completed"];
 
 async function run(query) {
   const { data, error } = await query;
-  if (error) throw error;
+  if (error) throw /failed to fetch|networkerror|load failed/i.test(error.message) ? new Error("Can't reach the server. Check your connection.") : error;
   return data;
 }
 const now = () => new Date().toISOString();
@@ -68,6 +68,7 @@ export async function deleteConversation(uid, id) {
 export async function sendMessage(conversationId, message) {
   const { data, error } = await supabase.functions.invoke("nexus-chat", { body: { conversation_id: conversationId, message } });
   if (error) {
+    if (error.name === "FunctionsFetchError") throw new Error("Can't reach the AI. Check your connection.");
     let text = "The AI core couldn't answer. Try again.";
     try { text = (await error.context.json()).error || text; } catch { /* keep the default */ }
     throw new Error(text);

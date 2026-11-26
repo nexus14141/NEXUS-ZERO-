@@ -97,3 +97,18 @@ dialog#sheet[open] { animation: rise .22s ease-out; }
 .acts { display: flex; gap: 6px; margin-top: 4px; }
 .act { padding: 8px 10px; background: none; border: 0; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
 .act:disabled { color: var(--ok); cursor: default; }
+
+/* Stage 5b: loading skeletons and accessibility */
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+::placeholder { color: #7d8494; opacity: 1; }
+.btn.compact { min-height: 44px; }
+.chip { min-height: 40px; }
+.act, .retry { min-height: 40px; }
+.sk { display: block; border-radius: 8px; background: linear-gradient(90deg, rgba(255, 255, 255, .05) 25%, rgba(255, 255, 255, .12) 50%, rgba(255, 255, 255, .05) 75%); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
+.sk-line { width: 70%; height: 13px; margin: 4px 0; }
+.sk-line.short { width: 40%; }
+.sk-dot { flex: none; width: 26px; height: 26px; border-radius: 50%; }
+.bubble .sk-line { width: min(220px, 60vw); }
+.bubble .sk-line.short { width: min(120px, 30vw); }
+@keyframes shimmer { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .sk { animation: none; } }

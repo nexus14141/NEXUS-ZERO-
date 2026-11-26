@@ -1,5 +1,5 @@
 import { PROJECT_STATUSES, listProjects, listTasks, createProject, updateProject, deleteProject } from "./db.js";
-import { esc, toast, openSheet, closeSheet, armDelete } from "./ui.js";
+import { esc, toast, openSheet, closeSheet, armDelete, skeleton } from "./ui.js";
 
 const LABELS = { active: "Active", paused: "Paused", completed: "Completed" };
 const label = (status) => LABELS[status] ?? status;
@@ -8,6 +8,7 @@ const FOLDER = '<svg class="ico" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2
 export async function projectsScreen(root, user) {
   let projects = [];
   let tasks = [];
+  let loading = true;
 
   const row = (p) => {
     const mine = tasks.filter((t) => t.project_id === p.id);
@@ -21,8 +22,8 @@ export async function projectsScreen(root, user) {
   function render() {
     if (!root.isConnected) return;
     root.innerHTML = `
-      <div class="head"><h1>Projects</h1><button class="btn primary compact" data-add>New project</button></div>
-      ${projects.length
+      <div class="head"><h1>Projects</h1><button class="btn primary compact" data-add${loading ? " disabled" : ""}>New project</button></div>
+      ${loading ? skeleton(3) : projects.length
         ? `<section class="glass rows">${projects.map(row).join("")}</section>`
         : `<section class="glass card empty"><h2>No projects yet</h2><p class="muted">Tap New project to create your first one.</p></section>`}`;
   }
@@ -83,11 +84,17 @@ export async function projectsScreen(root, user) {
     if (p) edit(p);
   });
 
-  root.innerHTML = '<h1>Projects</h1><p class="muted">Loading...</p>';
-  try {
-    [projects, tasks] = await Promise.all([listProjects(user.id), listTasks(user.id)]);
+  async function start() {
+    loading = true;
     render();
-  } catch (err) {
-    if (root.isConnected) root.innerHTML = `<h1>Projects</h1><section class="glass card empty"><h2>Couldn't load projects</h2><p class="muted">${esc(err.message)}</p></section>`;
+    try {
+      [projects, tasks] = await Promise.all([listProjects(user.id), listTasks(user.id)]);
+      loading = false;
+      render();
+    } catch (err) {
+      if (root.isConnected) root.innerHTML = `<h1>Projects</h1><section class="glass card empty"><h2>Couldn't load projects</h2><p class="muted">${esc(err.message)}</p><button class="btn secondary compact" data-reload>Try again</button></section>`;
+    }
   }
+  root.addEventListener("click", (e) => { if (e.target.closest("[data-reload]")) start(); });
+  await start();
 }

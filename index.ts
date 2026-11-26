@@ -45,6 +45,11 @@ Deno.serve(async (req) => {
     }
     const askedAt = new Date().toISOString();
 
+    // Cost guard: at most 100 messages per user per hour.
+    const { count } = await db.from("messages").select("id", { count: "exact", head: true })
+      .eq("user_id", user.id).eq("role", "user").gte("created_at", new Date(Date.now() - 3_600_000).toISOString());
+    if ((count ?? 0) >= 100) return json({ error: "You've reached the hourly message limit. Try again later." }, 429);
+
     // 3. Existing conversation: confirm it belongs to this user, then load recent history.
     let history: { role: string; content: string }[] = [];
     if (conversationId) {
@@ -58,7 +63,7 @@ Deno.serve(async (req) => {
     // 4. Pinned memories give the AI context about the user.
     const { data: memories } = await db.from("memories").select("content").eq("user_id", user.id).eq("pinned", true).limit(20);
     let system = "You are NEXUS ZERO, a calm, capable personal AI assistant. Be concise and clear. Use plain text and short paragraphs; avoid markdown tables and heavy formatting.";
-    if (memories?.length) system += "\n\nThings the user has asked you to remember:\n" + memories.map((m) => `- ${m.content}`).join("\n");
+    if (memories?.length) system += "\n\nThings the user has asked you to remember:\n" + memories.map((m) => `- ${String(m.content).slice(0, 500)}`).join("\n");
 
     // 5. Call OpenRouter (key stays on the server).
     const ctrl = new AbortController();

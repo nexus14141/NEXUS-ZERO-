@@ -1,9 +1,9 @@
 import { configError, supabase, register, login, resetPassword, getSession } from "./auth.js";
-import { $, toast, showError } from "./ui.js";
+import { $, toast, showError, closeSheet } from "./ui.js";
 import { tasksScreen } from "./tasks.js";
 import { projectsScreen } from "./projects.js";
 import { memoryScreen } from "./memory.js";
-import { chatScreen, askAI } from "./chat.js";
+import { chatScreen, askAI, resetChat } from "./chat.js";
 import { settingsScreen, changePassword } from "./settings.js";
 
 const state = { user: null };
@@ -39,7 +39,7 @@ const views = {
     <h1>${greeting()}</h1>
     <section class="glass card command">
       <h2>What do you want to work on?</h2>
-      <textarea id="command" placeholder="Describe a task, idea or project..."></textarea>
+      <textarea id="command" aria-label="Describe what you want to work on" placeholder="Describe a task, idea or project..."></textarea>
       <button class="btn primary wide" id="command-btn">Send</button>
     </section>
     <section class="glass rows">
@@ -87,6 +87,7 @@ function route() {
   });
   document.title = `${tab.label} · NEXUS ZERO`;
   window.scrollTo(0, 0);
+  $("#view").focus({ preventScroll: true }); // moves screen readers to the new screen
 }
 
 /* ---------- Auth ---------- */
@@ -137,7 +138,11 @@ function setSession(session) {
   $("#auth-view").hidden = !!state.user;
   $("#app-view").hidden = !state.user;
   if (!state.user) {
+    // Signed out: clear everything that belonged to the previous user.
     $("#password").value = "";
+    $("#view").replaceChildren();
+    closeSheet();
+    resetChat();
   } else if (previous !== state.user.id) {
     route();
   }

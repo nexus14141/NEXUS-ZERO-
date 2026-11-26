@@ -29,8 +29,12 @@ function sheetEl() {
   if (!dialog) {
     dialog = document.createElement("dialog");
     dialog.id = "sheet";
-    dialog.innerHTML = '<div class="sheet-body"><h2></h2><div></div></div>';
-    dialog.addEventListener("click", (e) => { if (e.target === dialog) dialog.close(); });
+    dialog.setAttribute("aria-labelledby", "sheet-title");
+    dialog.innerHTML = '<div class="sheet-body"><h2 id="sheet-title"></h2><div></div></div>';
+    // Close on a backdrop tap, but not when a drag that started inside the sheet ends outside it.
+    let downOnBackdrop = false;
+    dialog.addEventListener("pointerdown", (e) => { downOnBackdrop = e.target === dialog; });
+    dialog.addEventListener("click", (e) => { if (e.target === dialog && downOnBackdrop) dialog.close(); });
     document.body.append(dialog);
   }
   return dialog;
@@ -73,3 +77,9 @@ export function formatText(text) {
   }).join("");
   return s.replace(/\u0000(\d+)\u0000/g, (_, i) => `<pre><code>${blocks[i]}</code></pre>`);
 }
+
+// Loading placeholders sized like real rows and bubbles, so nothing jumps when data arrives.
+export const skeleton = (rows = 4) =>
+  `<section class="glass rows" aria-hidden="true">${'<div class="row"><i class="sk sk-dot"></i><div class="grow"><i class="sk sk-line"></i><i class="sk sk-line short"></i></div></div>'.repeat(rows)}</section>`;
+export const skeletonBubbles = () =>
+  '<div class="msg assistant" aria-hidden="true"><div class="bubble"><i class="sk sk-line"></i><i class="sk sk-line short"></i></div></div>'.repeat(2);

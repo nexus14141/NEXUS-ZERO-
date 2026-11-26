@@ -1,5 +1,5 @@
 import { listTasks, listProjects, createTask, updateTask, deleteTask } from "./db.js";
-import { esc, toast, openSheet, closeSheet, armDelete } from "./ui.js";
+import { esc, toast, openSheet, closeSheet, armDelete, skeleton } from "./ui.js";
 
 const FILTERS = [["open", "To do"], ["done", "Done"], ["all", "All"]];
 let filter = "open"; // remembered while the app stays open
@@ -7,12 +7,13 @@ let filter = "open"; // remembered while the app stays open
 export async function tasksScreen(root, user) {
   let tasks = [];
   let projects = [];
+  let loading = true;
   const projectName = (id) => projects.find((p) => p.id === id)?.name;
 
   const row = (t) => {
     const name = projectName(t.project_id);
     return `<div class="row task${t.completed ? " done" : ""}" data-id="${esc(t.id)}">
-      <button class="check" data-check aria-pressed="${t.completed}" aria-label="${t.completed ? "Mark as to do" : "Mark as done"}"></button>
+      <button class="check" data-check aria-pressed="${t.completed}" aria-label="${esc("Completed: " + t.title)}"></button>
       <button class="grow linkish" data-edit><span class="title">${esc(t.title)}</span>${name ? `<span class="sub">${esc(name)}</span>` : ""}</button>
     </div>`;
   };
@@ -21,9 +22,9 @@ export async function tasksScreen(root, user) {
     if (!root.isConnected) return;
     const shown = tasks.filter((t) => filter === "all" || (filter === "done") === t.completed);
     root.innerHTML = `
-      <div class="head"><h1>Tasks</h1><button class="btn primary compact" data-add>New task</button></div>
-      <div class="chips">${FILTERS.map(([id, label]) => `<button class="chip${id === filter ? " on" : ""}" data-filter="${id}">${label}</button>`).join("")}</div>
-      ${shown.length
+      <div class="head"><h1>Tasks</h1><button class="btn primary compact" data-add${loading ? " disabled" : ""}>New task</button></div>
+      <div class="chips">${FILTERS.map(([id, label]) => `<button class="chip${id === filter ? " on" : ""}" data-filter="${id}" aria-pressed="${id === filter}">${label}</button>`).join("")}</div>
+      ${loading ? skeleton(4) : shown.length
         ? `<section class="glass rows">${shown.map(row).join("")}</section>`
         : `<section class="glass card empty"><h2>No tasks here</h2><p class="muted">Tap New task to add one.</p></section>`}`;
   }
@@ -96,11 +97,17 @@ export async function tasksScreen(root, user) {
     if (t && e.target.closest("[data-edit]")) return edit(t);
   });
 
-  root.innerHTML = '<h1>Tasks</h1><p class="muted">Loading...</p>';
-  try {
-    [tasks, projects] = await Promise.all([listTasks(user.id), listProjects(user.id)]);
+  async function start() {
+    loading = true;
     render();
-  } catch (err) {
-    if (root.isConnected) root.innerHTML = `<h1>Tasks</h1><section class="glass card empty"><h2>Couldn't load tasks</h2><p class="muted">${esc(err.message)}</p></section>`;
+    try {
+      [tasks, projects] = await Promise.all([listTasks(user.id), listProjects(user.id)]);
+      loading = false;
+      render();
+    } catch (err) {
+      if (root.isConnected) root.innerHTML = `<h1>Tasks</h1><section class="glass card empty"><h2>Couldn't load tasks</h2><p class="muted">${esc(err.message)}</p><button class="btn secondary compact" data-reload>Try again</button></section>`;
+    }
   }
+  root.addEventListener("click", (e) => { if (e.target.closest("[data-reload]")) start(); });
+  await start();
 }

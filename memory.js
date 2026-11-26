@@ -1,5 +1,5 @@
 import { listMemories, createMemory, updateMemory, deleteMemory } from "./db.js";
-import { esc, toast, openSheet, closeSheet, armDelete } from "./ui.js";
+import { esc, toast, openSheet, closeSheet, armDelete, skeleton } from "./ui.js";
 
 const PIN = '<svg viewBox="0 0 24 24"><path d="M9 3h6l-1 6 3 3v2H7v-2l3-3z"/><path d="M12 14v7"/></svg>';
 const shortDate = (iso) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -7,6 +7,7 @@ const shortDate = (iso) => new Date(iso).toLocaleDateString(undefined, { month: 
 export async function memoryScreen(root, user) {
   let memories = [];
   let query = "";
+  let loading = true;
 
   const row = (m) => `
     <div class="row memory" data-id="${esc(m.id)}">
@@ -14,7 +15,7 @@ export async function memoryScreen(root, user) {
         <span class="mem-text">${esc(m.content)}</span>
         <span class="sub">${m.category ? `<b class="tag">${esc(m.category)}</b>` : ""}${esc(shortDate(m.created_at))}</span>
       </button>
-      <button class="pin" data-pin aria-pressed="${m.pinned}" aria-label="${m.pinned ? "Unpin memory" : "Pin memory"}">${PIN}</button>
+      <button class="pin" data-pin aria-pressed="${m.pinned}" aria-label="${esc("Pin: " + m.content.slice(0, 40))}">${PIN}</button>
     </div>`;
 
   // Redraws only the list, so the search box keeps focus while you type.
@@ -25,7 +26,7 @@ export async function memoryScreen(root, user) {
     const shown = [...memories]
       .sort((a, b) => Number(b.pinned) - Number(a.pinned) || new Date(b.created_at) - new Date(a.created_at))
       .filter((m) => !q || m.content.toLowerCase().includes(q) || (m.category ?? "").toLowerCase().includes(q));
-    box.innerHTML = shown.length
+    box.innerHTML = loading ? skeleton(4) : shown.length
       ? `<section class="glass rows">${shown.map(row).join("")}</section>`
       : memories.length
         ? '<section class="glass card empty"><h2>No matches</h2><p class="muted">Try a different word.</p></section>'
@@ -34,8 +35,8 @@ export async function memoryScreen(root, user) {
 
   function renderShell() {
     root.innerHTML = `
-      <div class="head"><h1>Memory</h1><button class="btn primary compact" data-add>New memory</button></div>
-      <input class="search" type="search" data-search placeholder="Search memories" aria-label="Search memories" autocomplete="off">
+      <div class="head"><h1>Memory</h1><button class="btn primary compact" data-add${loading ? " disabled" : ""}>New memory</button></div>
+      <input class="search" type="search" data-search placeholder="Search memories" aria-label="Search memories" autocomplete="off"${loading ? " disabled" : ""}>
       <div data-list></div>`;
     renderList();
   }
@@ -108,11 +109,17 @@ export async function memoryScreen(root, user) {
     if (e.target.matches("[data-search]")) { query = e.target.value; renderList(); }
   });
 
-  root.innerHTML = '<h1>Memory</h1><p class="muted">Loading...</p>';
-  try {
-    memories = await listMemories(user.id);
+  async function start() {
+    loading = true;
     renderShell();
-  } catch (err) {
-    if (root.isConnected) root.innerHTML = `<h1>Memory</h1><section class="glass card empty"><h2>Couldn't load memories</h2><p class="muted">${esc(err.message)}</p></section>`;
+    try {
+      memories = await listMemories(user.id);
+      loading = false;
+      renderShell();
+    } catch (err) {
+      if (root.isConnected) root.innerHTML = `<h1>Memory</h1><section class="glass card empty"><h2>Couldn't load memories</h2><p class="muted">${esc(err.message)}</p><button class="btn secondary compact" data-reload>Try again</button></section>`;
+    }
   }
+  root.addEventListener("click", (e) => { if (e.target.closest("[data-reload]")) start(); });
+  await start();
 }
