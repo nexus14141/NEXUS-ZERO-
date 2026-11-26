@@ -1,5 +1,6 @@
 // Data layer. Every query is scoped to the signed-in user (user_id) and is also protected by RLS.
 import { supabase } from "./auth.js";
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "./config.js";
 
 export const PROJECT_STATUSES = ["active", "paused", "completed"];
 
@@ -83,4 +84,53 @@ export async function exportAll(uid) {
     ["projects", "tasks", "memories", "conversations", "messages"].map(all)
   );
   return { projects, tasks, memories, conversations, messages };
+}
+
+// Streams the AI's answer. onDelta(text) is called as words arrive; resolves with { conversation_id }.
+export async function streamMessage(conversationId, message, onDelta) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error("Please sign in again.");
+  let res;
+  try {
+    res = await fetch(`${SUPABASE_URL}/functions/v1/nexus-chat`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_PUBLISHABLE_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ conversation_id: conversationId, message, stream: true }),
+    });
+  } catch {
+    throw new Error("Can't reach the AI. Check your connection.");
+  }
+  const type = res.headers.get("content-type") ?? "";
+  if (res.ok && type.includes("application/json")) { // an older function that doesn't stream
+    const out = await res.json();
+    onDelta(out.reply);
+    return out;
+  }
+  if (!res.ok || !type.includes("text/event-stream")) {
+    let text = "The AI core couldn't answer. Try again.";
+    try { text = (await res.json()).error || text; } catch { /* keep the default */ }
+    throw new Error(text);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result = null;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let end;
+    while ((end = buffer.indexOf("\n\n")) >= 0) {
+      const line = buffer.slice(0, end).trim();
+      buffer = buffer.slice(end + 2);
+      if (!line.startsWith("data:")) continue;
+      let event;
+      try { event = JSON.parse(line.slice(5)); } catch { continue; }
+      if (event.error) throw new Error(event.error);
+      if (event.delta) onDelta(event.delta);
+      if (event.done) result = event;
+    }
+  }
+  if (!result) throw new Error("The connection dropped before the reply finished. Try again.");
+  return result;
 }

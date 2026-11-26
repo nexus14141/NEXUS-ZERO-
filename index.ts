@@ -65,7 +65,31 @@ Deno.serve(async (req) => {
     let system = "You are NEXUS ZERO, a calm, capable personal AI assistant. Be concise and clear. Use plain text and short paragraphs; avoid markdown tables and heavy formatting.";
     if (memories?.length) system += "\n\nThings the user has asked you to remember:\n" + memories.map((m) => `- ${String(m.content).slice(0, 500)}`).join("\n");
 
-    // 5. Call OpenRouter (key stays on the server).
+    // 5. Build the OpenRouter request (the key stays on the server).
+    const payload = { model: MODEL, max_tokens: 1200, messages: [{ role: "system", content: system }, ...history, { role: "user", content: message }] };
+    const streaming = body.stream === true;
+
+    // Saves only after a complete answer, so a failed or retried request never leaves half a chat behind.
+    const saveExchange = async (reply: string): Promise<string> => {
+      let id = conversationId;
+      if (!id) {
+        const title = message.replace(/\s+/g, " ").slice(0, 60);
+        const { data: created, error } = await db.from("conversations").insert({ user_id: user.id, title }).select("id").single();
+        if (error || !created) throw new Error("save");
+        id = created.id as string;
+      } else {
+        await db.from("conversations").update({ updated_at: new Date().toISOString() }).eq("id", id).eq("user_id", user.id);
+      }
+      const { error } = await db.from("messages").insert([
+        { conversation_id: id, user_id: user.id, role: "user", content: message, created_at: askedAt },
+        { conversation_id: id, user_id: user.id, role: "assistant", content: reply, created_at: new Date().toISOString() },
+      ]);
+      if (error) throw new Error("save");
+      return id;
+    };
+    const failure = (e: Error) =>
+      e.message === "save" ? "Couldn't save the conversation." : e.name === "AbortError" ? "The AI took too long. Try again." : "The AI service couldn't answer. Try again.";
+
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
     let ai: Response;
@@ -74,42 +98,68 @@ Deno.serve(async (req) => {
         method: "POST",
         signal: ctrl.signal,
         headers: { Authorization: `Bearer ${aiKey}`, "Content-Type": "application/json", "HTTP-Referer": SITE, "X-Title": "NEXUS ZERO" },
-        body: JSON.stringify({
-          model: MODEL,
-          max_tokens: 1200,
-          messages: [{ role: "system", content: system }, ...history, { role: "user", content: message }],
-        }),
+        body: JSON.stringify(streaming ? { ...payload, stream: true } : payload),
       });
     } catch (e) {
-      console.error("OpenRouter request failed:", (e as Error).name);
-      return json({ error: (e as Error).name === "AbortError" ? "The AI took too long. Try again." : "The AI service is unreachable. Try again." }, 504);
-    } finally {
       clearTimeout(timer);
+      console.error("OpenRouter request failed:", (e as Error).name);
+      return json({ error: failure(e as Error) }, 504);
     }
-    if (!ai.ok) {
+    if (!ai.ok || !ai.body) {
+      clearTimeout(timer);
       console.error("OpenRouter returned status", ai.status);
       return json({ error: ai.status === 429 ? "The AI is busy. Try again in a moment." : "The AI service couldn't answer. Try again." }, 502);
     }
+
+    // 6a. Streaming: pass the words to the app as they arrive, then save the exchange.
+    if (streaming) {
+      const enc = new TextEncoder();
+      const dec = new TextDecoder();
+      const stream = new ReadableStream({
+        async start(c) {
+          const send = (o: unknown) => c.enqueue(enc.encode(`data: ${JSON.stringify(o)}\n\n`));
+          let reply = "";
+          let buf = "";
+          try {
+            const reader = ai.body!.getReader();
+            for (;;) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              buf += dec.decode(value, { stream: true });
+              let nl;
+              while ((nl = buf.indexOf("\n")) >= 0) {
+                const line = buf.slice(0, nl).trim();
+                buf = buf.slice(nl + 1);
+                if (!line.startsWith("data:") || line.endsWith("[DONE]")) continue;
+                let delta = "";
+                try { delta = JSON.parse(line.slice(5))?.choices?.[0]?.delta?.content ?? ""; } catch { /* partial line */ }
+                if (delta) { reply += delta; send({ delta }); }
+              }
+            }
+            if (!reply.trim()) throw new Error("empty");
+            send({ done: true, conversation_id: await saveExchange(reply.trim()) });
+          } catch (e) {
+            console.error("Stream failed:", (e as Error).message);
+            try { send({ error: failure(e as Error) }); } catch { /* the app disconnected */ }
+          } finally {
+            clearTimeout(timer);
+            try { c.close(); } catch { /* already closed */ }
+          }
+        },
+      });
+      return new Response(stream, { headers: { ...CORS, "Content-Type": "text/event-stream", "Cache-Control": "no-cache" } });
+    }
+
+    // 6b. Not streaming: wait for the whole answer.
     const result = await ai.json().catch(() => null);
+    clearTimeout(timer);
     const reply = String(result?.choices?.[0]?.message?.content ?? "").trim();
     if (!reply) return json({ error: "The AI returned an empty answer. Try again." }, 502);
-
-    // 6. Save only after a successful answer, so a retry never creates duplicates.
-    if (!conversationId) {
-      const title = message.replace(/\s+/g, " ").slice(0, 60);
-      const { data: created, error } = await db.from("conversations").insert({ user_id: user.id, title }).select("id").single();
-      if (error || !created) { console.error("Create conversation failed"); return json({ error: "Couldn't save the conversation." }, 500); }
-      conversationId = created.id;
-    } else {
-      await db.from("conversations").update({ updated_at: new Date().toISOString() }).eq("id", conversationId).eq("user_id", user.id);
+    try {
+      return json({ conversation_id: await saveExchange(reply), reply });
+    } catch {
+      return json({ error: "Couldn't save the conversation." }, 500);
     }
-    const { error: saveError } = await db.from("messages").insert([
-      { conversation_id: conversationId, user_id: user.id, role: "user", content: message, created_at: askedAt },
-      { conversation_id: conversationId, user_id: user.id, role: "assistant", content: reply, created_at: new Date().toISOString() },
-    ]);
-    if (saveError) { console.error("Save messages failed"); return json({ error: "Couldn't save the conversation." }, 500); }
-
-    return json({ conversation_id: conversationId, reply });
   } catch (e) {
     console.error("Unexpected error:", (e as Error).message);
     return json({ error: "Something went wrong. Try again." }, 500);

@@ -1,4 +1,4 @@
-import { listConversations, listMessages, deleteConversation, sendMessage, createMemory, createTask } from "./db.js";
+import { listConversations, listMessages, deleteConversation, streamMessage, createMemory, createTask } from "./db.js";
 import { esc, formatText, toast, openSheet, closeSheet, armDelete, skeleton, skeletonBubbles } from "./ui.js";
 
 const ARROW = '<svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
@@ -49,14 +49,14 @@ export async function chatScreen(root, user) {
   const bubble = (m, i) => `
     <div class="msg ${m.role}${m.failed ? " failed" : ""}" data-i="${i}">
       <div class="bubble">${m.role === "assistant" ? formatText(m.content) : esc(m.content)}</div>
-      ${m.role === "assistant" ? `<div class="acts">${actBtn(m, "memory", "Save to memory")}${actBtn(m, "task", "Make task")}</div>` : ""}
+      ${m.role === "assistant" && !m.streaming ? `<div class="acts">${actBtn(m, "memory", "Save to memory")}${actBtn(m, "task", "Make task")}</div>` : ""}
       ${m.failed ? `<button class="retry" data-retry>${esc(m.error)} Tap to retry</button>` : ""}
     </div>`;
 
   function renderThread() {
     if (!root.isConnected) return;
     thread.innerHTML = loading ? skeletonBubbles() : messages.length || sending
-      ? messages.map(bubble).join("") + (sending ? '<div class="msg assistant"><div class="bubble typing" aria-hidden="true"><i></i><i></i><i></i></div></div>' : "")
+      ? messages.map(bubble).join("") + (sending && messages.at(-1)?.role !== "assistant" ? '<div class="msg assistant"><div class="bubble typing" aria-hidden="true"><i></i><i></i><i></i></div></div>' : "")
       : '<section class="glass card empty"><div class="orb"></div><h2>Ask anything</h2><p class="muted">Your pinned memories are shared with the AI, so it knows what matters to you.</p></section>';
     form.querySelector(".send").disabled = sending;
     if (messages.length && !loading) form.scrollIntoView({ block: "end", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
@@ -73,16 +73,26 @@ export async function chatScreen(root, user) {
     }
     sending = true;
     const mine = epoch;
+    const reply = { role: "assistant", content: "", streaming: true };
     say("NEXUS ZERO is thinking");
     renderThread();
     try {
-      const out = await sendMessage(activeId, m.content);
+      const out = await streamMessage(activeId, m.content, (delta) => {
+        if (mine !== epoch) return;
+        if (!reply.content) { messages.push(reply); reply.content = delta; renderThread(); return; } // first words replace the dots
+        reply.content += delta;
+        const nearBottom = innerHeight + scrollY >= document.body.scrollHeight - 160;
+        const bubbleEl = thread.querySelector(".msg.assistant:last-child .bubble");
+        if (bubbleEl) bubbleEl.innerHTML = formatText(reply.content);
+        if (nearBottom) form.scrollIntoView({ block: "end" });
+      });
       if (mine !== epoch) return; // you moved to another chat; this one is saved in History
       activeId = out.conversation_id;
-      messages.push({ role: "assistant", content: out.reply });
+      reply.streaming = false;
       say("New reply from NEXUS ZERO");
     } catch (err) {
       if (mine !== epoch) return;
+      messages = messages.filter((x) => x !== reply); // a partial reply was never saved
       m.failed = true;
       m.error = err.message;
       say(err.message);
