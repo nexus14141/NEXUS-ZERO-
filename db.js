@@ -87,7 +87,7 @@ export async function exportAll(uid) {
 }
 
 // Streams the AI's answer. onDelta(text) is called as words arrive; resolves with { conversation_id }.
-export async function streamMessage(conversationId, message, onDelta) {
+export async function streamMessage(conversationId, message, onDelta, onActions) {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error("Please sign in again.");
   let res;
@@ -128,6 +128,7 @@ export async function streamMessage(conversationId, message, onDelta) {
       try { event = JSON.parse(line.slice(5)); } catch { continue; }
       if (event.error) throw new Error(event.error);
       if (event.delta) onDelta(event.delta);
+      if (event.actions) onActions?.(event.actions);
       if (event.done) result = event;
     }
   }

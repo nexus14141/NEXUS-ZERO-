@@ -112,3 +112,13 @@ dialog#sheet[open] { animation: rise .22s ease-out; }
 .bubble .sk-line.short { width: min(120px, 30vw); }
 @keyframes shimmer { to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) { .sk { animation: none; } }
+
+/* Stage 6: tasks and memories the AI proposes */
+.proposals { display: grid; gap: 8px; margin-top: 8px; min-width: min(300px, 80vw); }
+.proposal { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; padding: 12px 14px; border-radius: 16px; background: var(--glass); border: 1px dashed rgba(169, 188, 255, .4); }
+.proposal .grow { display: flex; flex: 1 1 140px; flex-direction: column; gap: 2px; min-width: 0; }
+.proposal .tag { align-self: flex-start; margin: 0 0 4px; }
+.proposal .title { font-weight: 600; word-break: break-word; }
+.proposal .sub { color: var(--muted); font-size: 13px; word-break: break-word; }
+.proposal .btn { flex: none; }
+.applied { color: var(--ok); font-size: 14px; font-weight: 600; }

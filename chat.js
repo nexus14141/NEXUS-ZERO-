@@ -1,4 +1,4 @@
-import { listConversations, listMessages, deleteConversation, streamMessage, createMemory, createTask } from "./db.js";
+import { listConversations, listProjects, listMessages, deleteConversation, streamMessage, createMemory, createTask } from "./db.js";
 import { esc, formatText, toast, openSheet, closeSheet, armDelete, skeleton, skeletonBubbles } from "./ui.js";
 
 const ARROW = '<svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
@@ -45,11 +45,23 @@ export async function chatScreen(root, user) {
   const input = form.elements.text;
   const say = (text) => { root.querySelector("[data-status]").textContent = text; }; // announced to screen readers
 
+  // A task or memory the AI suggests. It is only created when you tap Add.
+  const proposal = (a, i) => {
+    if (a.state === "dismissed") return "";
+    const lines = a.type === "task"
+      ? (a.project ? `<span class="sub">Project: ${esc(a.project)}</span>` : "") + (a.notes ? `<span class="sub">${esc(a.notes)}</span>` : "")
+      : (a.category ? `<span class="sub">Category: ${esc(a.category)}</span>` : "");
+    return `<div class="proposal" data-a="${i}">
+      <div class="grow"><b class="tag">${a.type === "task" ? "Task" : "Memory"}</b><span class="title">${esc(a.type === "task" ? a.title : a.content)}</span>${lines}</div>
+      ${a.state === "applied" ? '<span class="applied">Added</span>' : '<button class="btn primary compact" data-apply>Add</button><button class="act" data-dismiss>Dismiss</button>'}
+    </div>`;
+  };
   const actBtn = (m, kind, label) => `<button class="act" data-act="${kind}"${m.saved?.[kind] ? " disabled" : ""}>${m.saved?.[kind] ? "Saved" : label}</button>`;
   const bubble = (m, i) => `
     <div class="msg ${m.role}${m.failed ? " failed" : ""}" data-i="${i}">
       <div class="bubble">${m.role === "assistant" ? formatText(m.content) : esc(m.content)}</div>
       ${m.role === "assistant" && !m.streaming ? `<div class="acts">${actBtn(m, "memory", "Save to memory")}${actBtn(m, "task", "Make task")}</div>` : ""}
+      ${m.actions && !m.streaming ? `<div class="proposals">${m.actions.map(proposal).join("")}</div>` : ""}
       ${m.failed ? `<button class="retry" data-retry>${esc(m.error)} Tap to retry</button>` : ""}
     </div>`;
 
@@ -85,6 +97,8 @@ export async function chatScreen(root, user) {
         const bubbleEl = thread.querySelector(".msg.assistant:last-child .bubble");
         if (bubbleEl) bubbleEl.innerHTML = formatText(reply.content);
         if (nearBottom) form.scrollIntoView({ block: "end" });
+      }, (actions) => {
+        if (mine === epoch) reply.actions = actions.map((a) => ({ ...a, state: "pending" }));
       });
       if (mine !== epoch) return; // you moved to another chat; this one is saved in History
       activeId = out.conversation_id;
@@ -117,6 +131,27 @@ export async function chatScreen(root, user) {
       btn.disabled = false;
       toast(err.message, "error");
     }
+  }
+
+  async function applyProposal(m, i, card, btn) {
+    const a = m.actions[i];
+    if (a.state !== "pending") return;
+    btn.disabled = true;
+    try {
+      if (a.type === "task") {
+        const match = a.project ? (await listProjects(user.id)).find((p) => p.name.trim().toLowerCase() === a.project.toLowerCase()) : null;
+        await createTask(user.id, { title: a.title, description: a.notes, project_id: match?.id ?? null });
+      } else {
+        await createMemory(user.id, { content: a.content, category: a.category || "From chat" });
+      }
+      a.state = "applied";
+    } catch (err) {
+      btn.disabled = false;
+      toast(err.message, "error");
+      return;
+    }
+    card.outerHTML = proposal(a, i);
+    toast(a.type === "task" ? "Task added" : "Saved to memory");
   }
 
   async function openConversation(id) {
@@ -169,6 +204,13 @@ export async function chatScreen(root, user) {
   root.addEventListener("click", (e) => {
     if (e.target.closest("[data-history]")) return showHistory();
     if (e.target.closest("[data-new]")) { epoch++; sending = false; loading = false; activeId = null; messages = []; return renderThread(); }
+    const card = e.target.closest("[data-a]");
+    if (card) {
+      const m = messages[card.closest("[data-i]").dataset.i];
+      const i = Number(card.dataset.a);
+      if (e.target.closest("[data-apply]")) return applyProposal(m, i, card, e.target.closest("[data-apply]"));
+      if (e.target.closest("[data-dismiss]")) { m.actions[i].state = "dismissed"; return card.remove(); }
+    }
     const act = e.target.closest("[data-act]");
     if (act) return saveFromReply(act, messages[act.closest("[data-i]").dataset.i]);
     if (e.target.closest("[data-retry]")) return send(null, messages.find((m) => m.failed));
