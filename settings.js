@@ -1,5 +1,5 @@
 import { logout, updatePassword } from "./auth.js";
-import { exportAll } from "./db.js";
+import { exportAll, getAiUsage } from "./db.js";
 import { toast, openSheet, closeSheet } from "./ui.js";
 
 let installPrompt = null; // set when the browser offers to install the app
@@ -56,7 +56,8 @@ export async function settingsScreen(root, user) {
     <h1>Settings</h1>
     <section class="glass rows">
       <div class="row"><span class="grow">Account</span><span class="val" data-email></span></div>
-      <div class="row"><span class="grow">Version</span><span class="val">Stage 5</span></div>
+      <div class="row"><span class="grow">AI requests today<span class="sub" data-ai-reset></span></span><span class="val" data-ai-usage>Checking...</span></div>
+      <div class="row"><span class="grow">Version</span><span class="val">Stage 6.1</span></div>
     </section>
     <section class="glass rows">
       ${action("password", "Change password", "Choose a new one")}
@@ -65,6 +66,17 @@ export async function settingsScreen(root, user) {
     </section>
     <button class="btn secondary wide" data-act="logout">Sign out</button>`;
   root.querySelector("[data-email]").textContent = user.email ?? "";
+
+  // Read-only: how many AI planning requests you have used today (the server does the counting).
+  const usageEl = root.querySelector("[data-ai-usage]");
+  const resetEl = root.querySelector("[data-ai-reset]");
+  getAiUsage()
+    .then((u) => {
+      if (!root.isConnected) return;
+      usageEl.textContent = u.ai_enabled ? `${u.used} of ${u.limit}` : "Switched off";
+      if (u.ai_enabled) resetEl.textContent = "Resets at " + new Date(u.resets_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    })
+    .catch(() => { if (root.isConnected) usageEl.textContent = "Unavailable"; });
 
   root.addEventListener("click", async (e) => {
     const el = e.target.closest("[data-act]");

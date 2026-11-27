@@ -135,3 +135,7 @@ export async function streamMessage(conversationId, message, onDelta, onActions)
   if (!result) throw new Error("The connection dropped before the reply finished. Try again.");
   return result;
 }
+
+/* ---------- AI usage (read-only) ---------- */
+// Returns { used, limit, remaining, resets_at, ai_enabled } for the signed-in user.
+export const getAiUsage = () => run(supabase.rpc("ai_usage_today"));
