@@ -37,7 +37,7 @@ export async function chatScreen(root, user) {
     <div class="thread" data-thread></div>
     <p class="sr-only" role="status" data-status></p>
     <form class="composer glass" data-form>
-      <textarea name="text" rows="1" maxlength="4000" placeholder="Message NEXUS ZERO" aria-label="Message"></textarea>
+      <textarea name="text" rows="1" maxlength="1500" placeholder="Message NEXUS ZERO" aria-label="Message"></textarea>
       <button class="send" aria-label="Send message">${ARROW}</button>
     </form>`;
   const thread = root.querySelector("[data-thread]");
@@ -69,7 +69,7 @@ export async function chatScreen(root, user) {
     if (!root.isConnected) return;
     thread.innerHTML = loading ? skeletonBubbles() : messages.length || sending
       ? messages.map(bubble).join("") + (sending && messages.at(-1)?.role !== "assistant" ? '<div class="msg assistant"><div class="bubble typing" aria-hidden="true"><i></i><i></i><i></i></div></div>' : "")
-      : '<section class="glass card empty"><div class="orb"></div><h2>Ask anything</h2><p class="muted">Your pinned memories are shared with the AI, so it knows what matters to you.</p></section>';
+      : '<section class="glass card empty"><div class="orb"></div><h2>Ask anything</h2><p class="muted">Each AI reply uses one of your daily AI requests. Check Settings to see how many are left.</p></section>';
     form.querySelector(".send").disabled = sending;
     if (messages.length && !loading) form.scrollIntoView({ block: "end", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   }

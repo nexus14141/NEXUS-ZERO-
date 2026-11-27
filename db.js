@@ -92,7 +92,7 @@ export async function streamMessage(conversationId, message, onDelta, onActions)
   if (!session) throw new Error("Please sign in again.");
   let res;
   try {
-    res = await fetch(`${SUPABASE_URL}/functions/v1/nexus-chat`, {
+    res = await fetch(`${SUPABASE_URL}/functions/v1/nexus-agent`, {
       method: "POST",
       headers: { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_PUBLISHABLE_KEY, "Content-Type": "application/json" },
       body: JSON.stringify({ conversation_id: conversationId, message, stream: true }),
